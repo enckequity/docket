@@ -167,7 +167,7 @@ def link_is_local(url: str) -> bool:
 
 
 LOCAL_LINK_NOTE = ("⚠️ That link only opens on this computer. Before sending it to a real customer, set "
-                   "Public link for customers in Hermes Settings → Plugins → docket (or /docket link <url>).")
+                   "Public link for customers in Docket's settings (or /docket link <url>).")
 
 
 def customer_message(book: PriceBook, rec: QuoteRecord, url: str) -> str:

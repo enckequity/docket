@@ -34,7 +34,7 @@ def _module(name: str):
                 return importlib.import_module(f"{mod_name}.{name}")
         except Exception:
             continue
-    raise HTTPException(503, "Docket is not loaded in this Hermes process. Enable it and restart the gateway.")
+    raise HTTPException(503, "Docket is not loaded. Enable it and restart your assistant.")
 
 
 def _card(rec, store) -> dict[str, Any]:

@@ -179,7 +179,10 @@ class AcceptApp:
 
 def make_handler(app: AcceptApp):
     class Handler(BaseHTTPRequestHandler):
-        server_version = "Docket"
+        def send_response(self, code, message=None):   # no Server header: the page names no software
+            self.log_request(code)
+            self.send_response_only(code, message)
+            self.send_header("Date", self.date_time_string())
 
         def _send(self, status: int, ctype: str, body: bytes) -> None:
             self.send_response(status)
@@ -201,7 +204,7 @@ def make_handler(app: AcceptApp):
             form = {k: v[0] for k, v in parse_qs(raw).items()}
             self._send(*app.handle("POST", self.path.split("?", 1)[0], form))
 
-        def log_message(self, fmt, *args):  # quiet; Hermes logs carry what matters
+        def log_message(self, fmt, *args):  # quiet; the host's logs carry what matters
             logger.debug("accept page: " + fmt, *args)
 
     return Handler

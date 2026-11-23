@@ -328,7 +328,7 @@ function JobsPage() {
       className: 'flex flex-col gap-2 p-6 text-[0.8125rem]',
       children: [
         jsx('span', { children: 'Docket’s backend isn’t reachable.' }),
-        jsx('span', { className: 'text-(--ui-text-tertiary)', children: 'Enable the Docket plugin (hermes plugins enable docket) and restart the gateway, then retry.' }),
+        jsx('span', { className: 'text-(--ui-text-tertiary)', children: 'Enable the Docket plugin and restart your assistant, then retry.' }),
         jsx('div', { children: jsx(ActionButton, { label: 'Retry', onClick: () => refetch() }) })
       ]
     })

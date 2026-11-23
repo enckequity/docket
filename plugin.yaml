@@ -57,7 +57,11 @@ config_schema:
   public_link:
     type: string
     label: Public link for customers
-    description: "Base URL customers open quotes at, e.g. your tunnel (https://quotes.example.com). Blank = this computer only (http://127.0.0.1:8787)."
+    description: "Base URL customers open quotes at, e.g. your tunnel (https://quotes.example.com). Blank = this computer only (http://127.0.0.1:8787). The DOCKET_PUBLIC_LINK environment variable, when set, overrides this."
+  sender_email:
+    type: string
+    label: Send quotes from
+    description: "From address on quote and invoice emails in the outbox. Blank = your business email (as Reply-To too); with neither, no From is written."
   followup_after_days:
     type: integer
     label: Follow up after (days)

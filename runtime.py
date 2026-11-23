@@ -201,6 +201,12 @@ def public_link() -> str:
     return setting("public_link") or store().get_meta("public_base_url") or ""
 
 
+def public_link_from_env() -> str:
+    """The deployment-pinned public link (DOCKET_PUBLIC_LINK), '' when the owner's setting applies."""
+    from .settings import env_value
+    return env_value("public_link").rstrip("/")
+
+
 def link_base(route: str | None = None, st: Store | None = None) -> str:
     """Base URL for links built without starting the accept page (reports, Desktop, the accept page's PDF).
     route None = the active profile's; st = a named profile's store (read inside its settings scope)."""

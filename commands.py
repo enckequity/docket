@@ -155,6 +155,7 @@ DOCKET_HELP = """Docket
   /pricebook          show your price book; /pricebook add <prices> changes it (preview first)
   /docket demo        load the demo company (Copperline Plumbing & Drain); 'demo reset' wipes existing quotes first
   /docket setup       run in Telegram, Discord or Slack: quote cards and customer pings come to this chat
+                      (only the owner who ran it first can run it again; '/docket setup pair' adds another app)
   /docket serve       start the customer accept page in this session
   /docket link <url>  public base URL for customer links (e.g. your tunnel); 'local' to reset"""
 
@@ -164,15 +165,21 @@ def docket_admin(raw_args: str = "", **kwargs) -> str:
         verb, _, rest = (raw_args or "").strip().partition(" ")
         verb = verb.lower()
         if verb == "serve":
-            return f"Customer accept page: {runtime.ensure_accept_server()}  (runs while this Hermes process runs)"
+            return f"Customer accept page: {runtime.ensure_accept_server()}  (runs while your assistant is running)"
         if verb == "setup":
-            return setup_owner(kwargs)
+            return setup_owner(kwargs, rest.strip())
+        refused = _not_owner(kwargs) if verb in {"demo", "link"} else ""
+        if refused:
+            return refused
         if verb == "demo":
             return run_demo(force=rest.strip().lower() == "reset")
         if verb == "link":
             value = rest.strip()
             if not value:
                 return f"Customer links use: {runtime.ensure_accept_server()}"
+            if runtime.public_link_from_env():
+                return (f"Customer links are set by your workspace ({runtime.public_link_from_env()}) "
+                        "and can't be changed here.")
             if value.lower() == "local":
                 _save_public_link("")
                 return "Customer links will use the local accept page."
@@ -200,7 +207,7 @@ CLI_HELP = """Docket: quotes for trades businesses
   hermes docket demo [--reset]    load the demo company (Copperline Plumbing & Drain); --reset wipes existing quotes
   hermes docket serve             run the customer accept page in the foreground
 
-In a Hermes chat (start a new session after installing):
+In a chat with your assistant (start a new session after installing):
   /quote <customer, address or ZIP, the job>   price a job from your price book
   /jobs                                        your quotes and jobs by status
   /pricebook                                   show your price book; /pricebook add <prices> changes it
@@ -241,18 +248,49 @@ def run_demo(*, force: bool = False) -> str:
             "  /jobs\n  /pricebook")
 
 
-def setup_owner(kwargs: dict) -> str:
-    from .owner import PLATFORMS, set_owner
+NOT_OWNER = "Only the business owner can do that."
+
+
+def _not_owner(kwargs: dict) -> str:
+    """'' when the caller may change Docket's setup. Local surfaces (terminal, desktop) pass no sender and are the
+    machine's operator. A messaging sender must be the registered owner once one exists."""
+    from .owner import is_owner, owners
+    source = kwargs.get("source")
+    if source is None:
+        return ""
+    store = runtime.store()
+    if not owners(store):
+        return ""
+    platform = str(kwargs.get("platform") or "")
+    return "" if is_owner(store, platform, str(getattr(source, "user_id", "") or "")) else NOT_OWNER
+
+
+def setup_owner(kwargs: dict, arg: str = "") -> str:
+    """Register the owner's chat. The first person to run it is the owner; after that only they can run it again
+    (the engine passes the sender as source.user_id). Another app is added with a one-time code from
+    '/docket setup pair' run by the owner in an app already set up."""
+    from .owner import PLATFORMS, get_owner, is_owner, issue_pair_code, owners, set_owner, take_pair_code
     platform = str(kwargs.get("platform") or "")
     source = kwargs.get("source")
     if platform not in PLATFORMS or source is None:
-        return ("Run /docket setup from your Telegram, Discord or Slack chat with Hermes. "
+        return ("Run /docket setup from your Telegram, Discord or Slack chat with your assistant. "
                 "Docket will send quote cards with buttons, and customer accept pings, to that chat.")
     chat_id, user_id = str(getattr(source, "chat_id", "") or ""), str(getattr(source, "user_id", "") or "")
     if not chat_id or not user_id:
         return "Docket couldn't read this chat's id. Try again from a direct message with the bot."
-    set_owner(runtime.store(), platform, chat_id=chat_id, user_id=user_id,
-              thread_id=str(getattr(source, "thread_id", "") or ""))
+    store = runtime.store()
+    current, others = get_owner(store, platform), [p for p in owners(store) if p != platform]
+    if arg.lower() == "pair":
+        if not is_owner(store, platform, user_id):
+            return NOT_OWNER
+        return (f"Your code is {issue_pair_code(store)}. Within 10 minutes, send /docket setup <code> from the "
+                "other app's chat with your assistant.")
+    if current is not None and current["user_id"] != user_id:
+        return f"Docket is already set up on {platform.title()} for the business owner. {NOT_OWNER}"
+    if current is None and others and not take_pair_code(store, arg):
+        return (f"Docket is already set up on {', '.join(p.title() for p in others)}. To add {platform.title()}, "
+                "the owner runs /docket setup pair there, then /docket setup <code> here.")
+    set_owner(store, platform, chat_id=chat_id, user_id=user_id, thread_id=str(getattr(source, "thread_id", "") or ""))
     return (f"Docket is set up on {platform.title()}. Quote cards and customer updates will come here, and only you "
             f"can press their buttons. Try: /quote Dana Henderson, 14 Maple St 62707, water heater, permit")
 
