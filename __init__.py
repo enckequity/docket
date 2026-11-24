@@ -401,12 +401,34 @@ def _make_gate(ctx):
         if tool_name not in GATED_TOOLS:
             return None
         if tool_name == "docket_pricebook_save":
-            return {"action": "approve", "message": _pricebook_approval_text((args or {}).get("preview_id")),
-                    "rule_key": f"docket:{tool_name}"}
-        return {"action": "approve",
-                "message": f"Send quote {(args or {}).get('quote_id', '?')} to the customer?",
-                "rule_key": f"docket:{tool_name}"}
+            preview_id = str((args or {}).get("preview_id") or "")
+            return {"action": "approve", "message": _pricebook_approval_text(preview_id),
+                    "rule_key": _rule_key(tool_name, preview_id or "none")}
+        message, subject = _send_approval((args or {}).get("quote_id"))
+        return {"action": "approve", "message": message, "rule_key": _rule_key(tool_name, subject)}
     return pre_tool_call
+
+
+def _rule_key(tool_name: str, subject: str) -> str:
+    """One approval grain per quote version / price book preview: an 'always' on one send never covers the next."""
+    import re
+    return f"docket:{tool_name}:{re.sub(r'[^A-Za-z0-9._-]', '_', str(subject))[:64] or 'none'}"
+
+
+def _send_approval(quote_id) -> tuple[str, str]:
+    """(approval prompt, rule-key subject) for a send, from Docket's own record of the quote when it exists."""
+    raw = str(quote_id or "").strip()
+    try:
+        from decimal import Decimal
+        from . import runtime
+        from .money import fmt_money
+        from .service import parse_quote_id
+        rec = runtime.store().get(parse_quote_id(raw))
+    except Exception:
+        return f"Send quote {raw or '?'} to the customer?", f"unknown-{raw or 'none'}"
+    name = (rec.customer or {}).get("name") or "the customer"
+    total = fmt_money(Decimal(rec.total), (rec.quote or {}).get("currency", "USD"))
+    return (f"Send quote {rec.number} v{rec.version} ({total}) to {name}?", f"{rec.number}-v{rec.version}")
 
 
 def _hint_hook(user_message: str = "", **kwargs):

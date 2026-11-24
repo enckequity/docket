@@ -330,6 +330,12 @@ Also supported: travel zones by ZIP, member discounts (labor only), materials so
 
 **Customer links.** The accept page runs on your machine (`127.0.0.1:8787`, or the next free port). To let real customers reach it, put it behind a tunnel you control and set **Public link for customers** in Settings → Plugins → docket (or run `/docket link https://your-tunnel.example`).
 
+A hosted deployment can pin the public link for the whole process with the `DOCKET_PUBLIC_LINK` environment variable (e.g. `DOCKET_PUBLIC_LINK=https://portal.example.com/w/acme`). It wins over the setting, and `/docket link` then reports it instead of changing it. The same base can also be set per profile in `config.yaml` as `plugins.entries.docket.settings.public_link`. Links are `<base>/q/<token>` (or `<base>/p/<profile>/q/<token>` for a named profile in a multi-profile gateway), so the front door forwards `/q/*` (and `/p/*` if used) unchanged to `http://127.0.0.1:8787`. Each token is HMAC-signed with a per-store secret, expires after **Quotes valid for**, and names one quote version; the server checks it and has no other login.
+
+**Who owns the chat.** The first person to run `/docket setup` on a platform becomes the owner there; only they can run it again, change the link from a chat or reload the demo. To add a second app, the owner runs `/docket setup pair` in an app that is already set up and sends `/docket setup <code>` from the new one within 10 minutes.
+
+**Sender.** Outbox emails are From **Send quotes from** (`sender_email`, or `DOCKET_SENDER_EMAIL`), else the business email, under the business name; the business email is the Reply-To when they differ. With no address set, no From is written.
+
 **Model.** Docket registers its own model slot, **Docket job intake**, with thinking off. Point it at a fast, cheap model in Hermes's Models settings if you like. Small local models work; if the model fails, Docket falls back to its built-in parser.
 
 ---

@@ -102,3 +102,13 @@ def test_ensure_running_moves_to_a_free_port_when_taken(env, monkeypatch):
         accept_server._server.shutdown()
         accept_server._server = None
         blocker.close()
+
+
+def test_accept_host_is_loopback_unless_the_deployment_names_an_ip(monkeypatch):
+    from docket import runtime
+    monkeypatch.delenv("DOCKET_ACCEPT_HOST", raising=False)
+    assert runtime.accept_host() == "127.0.0.1"
+    monkeypatch.setenv("DOCKET_ACCEPT_HOST", " 0.0.0.0 ")
+    assert runtime.accept_host() == "0.0.0.0"
+    monkeypatch.setenv("DOCKET_ACCEPT_HOST", "example.com")
+    assert runtime.accept_host() == "127.0.0.1"

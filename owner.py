@@ -67,6 +67,39 @@ def owners(store) -> dict[str, dict]:
     return {p: o for p in PLATFORMS if (o := get_owner(store, p))}
 
 
+PAIR_KEY, PAIR_TTL_SECONDS = "owner_pair_code", 600
+
+
+def is_owner(store, platform: str, user_id: str) -> bool:
+    owner = get_owner(store, platform)
+    return bool(owner and user_id and str(user_id) == owner["user_id"])
+
+
+def issue_pair_code(store, *, now: float | None = None) -> str:
+    """A one-time code the registered owner hands to a second platform's /docket setup (expires in 10 minutes)."""
+    import secrets
+    import time
+    code = secrets.token_hex(4)
+    store.set_meta(PAIR_KEY, json.dumps({"code": code, "expires": (now or time.time()) + PAIR_TTL_SECONDS}))
+    return code
+
+
+def take_pair_code(store, code: str, *, now: float | None = None) -> bool:
+    """True once for the current unexpired code; any attempt (right or wrong) uses it up."""
+    import hmac
+    import time
+    raw = store.get_meta(PAIR_KEY)
+    if not raw or not code:
+        return False
+    store.set_meta(PAIR_KEY, "")
+    try:
+        saved = json.loads(raw)
+    except ValueError:
+        return False
+    return (now or time.time()) <= float(saved.get("expires", 0)) and \
+        hmac.compare_digest(str(saved.get("code", "")), str(code).strip().lower())
+
+
 # ---------------------------------------------------------------- cards
 
 def _data(verb: str, quote_id: int, arg: str | int = "") -> str:
@@ -155,7 +188,7 @@ def perform(data: str, *, platform: str, user_id: str, store, book, outbox_root,
     from .store import StoreError
     owner = get_owner(store, platform)
     if not owner:
-        return ActionResult(False, "Run /docket setup in your chat with Hermes first.")
+        return ActionResult(False, "Run /docket setup in your chat with your assistant first.")
     if str(user_id) != owner["user_id"]:
         return ActionResult(False, "Only the business owner can use these buttons.")
     try:

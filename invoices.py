@@ -178,4 +178,4 @@ def obol_payload(invoice: dict) -> dict:
                       "amount": float(Decimal(doc["tax"])), "quantity": 1})
     return {"customer_email": invoice["customer"]["email"], "customer_name": invoice["customer"]["name"],
             "line_items": items, "currency": cur.lower(), "days_until_due": max(0, (date.fromisoformat(invoice["due"]) - date.fromisoformat(invoice["issued"][:10])).days),
-            "memo": f"{invoice['number']} for quote {invoice['quote_number']} (Docket)", "send": False}
+            "memo": f"{invoice['number']} for quote {invoice['quote_number']}", "send": False}
