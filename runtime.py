@@ -191,8 +191,26 @@ def accept_app():
 def ensure_accept_server() -> str:
     """Start the local accept page if needed; return the base URL customer links should use (this profile's)."""
     from .accept_server import ensure_running
-    local = ensure_running(accept_app())
+    local = ensure_running(accept_app(), host=accept_host())
     return (public_link() or local).rstrip("/") + profile_route()
+
+
+def accept_host() -> str:
+    """The address the accept page listens on: 127.0.0.1, or the deployment's DOCKET_ACCEPT_HOST (an IP address, for example
+    0.0.0.0 inside a container whose published port a front proxy forwards). The page has no login, so expose it only behind a
+    proxy that forwards just its /q/ paths. Anything that is not an IP address is ignored."""
+    import ipaddress
+    import os
+    from .accept_server import DEFAULT_HOST
+    value = (os.environ.get("DOCKET_ACCEPT_HOST") or "").strip()
+    if not value:
+        return DEFAULT_HOST
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        logger.warning("Docket: DOCKET_ACCEPT_HOST is not an IP address; the accept page stays on %s", DEFAULT_HOST)
+        return DEFAULT_HOST
+    return value
 
 
 def public_link() -> str:
