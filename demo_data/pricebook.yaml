@@ -2,6 +2,11 @@
 # Every price Docket quotes comes from this file. Money values are quoted strings so they are
 # exact decimals. Edit freely; run /pricebook validate after changes.
 
+# A sample book: once customer links are public, Docket refuses to send a quote priced from it or to invoice
+# from it (local try-out links still work). A copy made by editing it stays a sample. Start your own with
+# /pricebook new, or remove this line once every price and the business details are yours.
+demo: true
+
 business:
   name: Copperline Plumbing & Drain
   phone: "(555) 010-4477"

@@ -23,6 +23,7 @@ from typing import Any, Callable, NamedTuple
 from urllib.parse import parse_qs
 
 from .money import fmt_money
+from .store_paths import PROFILE_RE
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,8 @@ class AcceptApp:
             name, parts = parts[1], parts[2:]
         if len(parts) < 2 or parts[0] != "q":
             return 404, "text/html", message_page("Not found", "This page does not exist.")
+        if name and not PROFILE_RE.fullmatch(name):     # never hand '..' or any non-profile name to resolve()
+            return 404, "text/html", message_page("Not found", "This page does not exist.")
         token, action = parts[1], (parts[2] if len(parts) > 2 else "")
         try:
             target = self._target(name)
@@ -139,13 +142,20 @@ class AcceptApp:
             return 503, "text/html", message_page("Quote unavailable", "Please try again in a minute.")
         if target is None:
             return 404, "text/html", message_page("Not found", "This page does not exist.")
-        with (target.scope() if target.scope else contextlib.nullcontext()):
-            return self._handle(method, target, token, action, form, prefix=(f"/p/{name}" if name else ""))
+        try:
+            with (target.scope() if target.scope else contextlib.nullcontext()):
+                return self._handle(method, target, token, action, form, prefix=(f"/p/{name}" if name else ""))
+        except Exception:      # always a page of ours: a dropped connection looks like the server is down
+            logger.exception("Docket accept page: %s %s failed", method, action or "view")
+            return 503, "text/html", message_page("Quote unavailable", "Please try again in a minute.")
 
     def _handle(self, method: str, target: Target, token: str, action: str, form: dict[str, str], *,
                 prefix: str) -> tuple[int, str, bytes]:
-        from .service import ServiceError, customer_action, accept_url
+        from .service import ServiceError, accept_url, customer_action, sample_on_public_link
+        from .store import StoreError
         store, book = target.store, target.book
+        if sample_on_public_link(store, book, token, target.base):
+            return 410, "text/html", message_page("Quote unavailable", "This quote is not available right now.")
         try:
             if method == "GET" and action == "":
                 rec = customer_action(store, token, "view")
@@ -165,6 +175,8 @@ class AcceptApp:
                 return 200, "text/html", quote_page(book, rec, token, message=msg, prefix=prefix)
         except ServiceError as exc:
             return 410, "text/html", message_page("Quote unavailable", str(exc))
+        except StoreError:     # a signed link to a quote that no longer exists (e.g. the demo was reset)
+            return 410, "text/html", message_page("Quote unavailable", "This quote is no longer available.")
         return 405, "text/html", message_page("Not allowed", "That action is not available.")
 
     @staticmethod
@@ -199,7 +211,10 @@ def make_handler(app: AcceptApp):
             self._send(*app.handle("GET", self.path.split("?", 1)[0], {}))
 
         def do_POST(self):  # noqa: N802
-            length = min(int(self.headers.get("Content-Length") or 0), MAX_BODY)
+            try:
+                length = min(max(int(self.headers.get("Content-Length") or 0), 0), MAX_BODY)
+            except ValueError:
+                return self._send(400, "text/html", message_page("Not allowed", "That request is not valid."))
             raw = self.rfile.read(length).decode("utf-8", "replace") if length else ""
             form = {k: v[0] for k, v in parse_qs(raw).items()}
             self._send(*app.handle("POST", self.path.split("?", 1)[0], form))

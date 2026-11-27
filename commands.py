@@ -37,8 +37,15 @@ ACTIONS = [
 def make_quote_command(ctx: Any):
     def quote(raw_args: str = "", **kwargs) -> str:
         surface = str(kwargs.get("platform") or "")
+        text = (raw_args or "").strip()
         try:
-            return _quote(ctx, (raw_args or "").strip(), surface)
+            # A typed /quote is the owner's own action (a send skips the approval card), so once an owner is
+            # registered only they may run it from a chat; the engine's slash access gates who reaches this at all.
+            if text.lower() not in READ_ONLY_QUOTE:
+                refused = _not_owner(kwargs)
+                if refused:
+                    return refused
+            return _quote(ctx, text, surface)
         except (ServiceError, StoreError, InvoiceError) as exc:
             return f"Docket: {exc}"
         except Exception as exc:
@@ -249,6 +256,8 @@ def run_demo(*, force: bool = False) -> str:
 
 
 NOT_OWNER = "Only the business owner can do that."
+READ_ONLY_QUOTE = {"", "help", "-h", "--help"}
+READ_ONLY_PRICEBOOK = {"", "show", "list", "validate", "help", "-h", "--help"}
 
 
 def _not_owner(kwargs: dict) -> str:
@@ -335,8 +344,13 @@ SAVE_CHOICES = [
 def make_pricebook_command(ctx: Any):
     def pricebook(raw_args: str = "", **kwargs) -> str:
         surface = str(kwargs.get("platform") or "")
+        text = (raw_args or "").strip()
         try:
-            return _pricebook(ctx, (raw_args or "").strip(), surface)
+            if text.partition(" ")[0].lower() not in READ_ONLY_PRICEBOOK:
+                refused = _not_owner(kwargs)
+                if refused:
+                    return refused
+            return _pricebook(ctx, text, surface)
         except Exception as exc:
             from .pbedit import EditError
             if isinstance(exc, EditError):

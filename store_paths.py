@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+
+PROFILE_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")      # Hermes profile ids (hermes_constants.PROFILE_ID_RE)
 
 PLUGIN_DIR = Path(__file__).resolve().parent
 DEMO_PRICEBOOK = PLUGIN_DIR / "demo_data" / "pricebook.yaml"

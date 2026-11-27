@@ -25,6 +25,32 @@ class ServiceError(ValueError):
     pass
 
 
+def reaches_customers(store: Store) -> bool:
+    """True when customer links are public (a deployment's or the owner's public link), not this computer only."""
+    from .settings import setting
+    base = setting("public_link") or store.get_meta("public_base_url") or ""
+    return bool(base) and not link_is_local(base)
+
+
+def demo_refusal(what: str, then: str = "then revise the quote (any change reprices it from your book)") -> str:
+    return (f"{what} was priced from Docket's sample price book, so it can't go to a customer. Start your own with "
+            f"/pricebook new (or remove the 'demo: true' line once every price in it is yours), {then}.")
+
+
+def sample_on_public_link(store: Store, book: Any, token: str, base: str | None) -> bool:
+    """True when a customer link served from a public address names a sample-priced quote (or the sample book is
+    current): the accept page refuses it, however the link got out (a try-out send repeated after going public)."""
+    if not base or link_is_local(base):
+        return False
+    if getattr(book, "demo", False):
+        return True
+    try:
+        quote_id, _ = read_token(store.link_secret(), token)
+        return bool(store.get(quote_id).quote.get("demo_pricebook"))
+    except (LinkError, StoreError, ValueError):
+        return False                                   # customer_action gives the usual answer
+
+
 @dataclass
 class Drafted:
     record: QuoteRecord
@@ -117,24 +143,32 @@ def accept_url(store: Store, rec: QuoteRecord, base_url: str | None = None) -> s
 
 
 def send_quote(store: Store, book: PriceBook, quote_id: int, *, outbox_root: Path, actor: str, surface: str = "",
-               base_url: str | None = None, render_pdf: Any = None) -> dict[str, Any]:
-    """Send the current version once. Repeats (double taps) return the earlier send without re-sending."""
+               base_url: str | None = None, render_pdf: Any = None, allow_demo: bool = False) -> dict[str, Any]:
+    """Send the current version once. Repeats (double taps) return the earlier send without re-sending.
+
+    Once links are public, a quote priced from the sample price book (or sent while it is the current book) is refused;
+    a local try-out link still works, and the demo seeder (allow_demo, fictional customers) always sends."""
     with store.lock:   # one send at a time: a double tap waits, then sees the first send
         return _send_locked(store, book, quote_id, outbox_root=outbox_root, actor=actor, surface=surface,
-                            base_url=base_url, render_pdf=render_pdf)
+                            base_url=base_url, render_pdf=render_pdf, allow_demo=allow_demo)
 
 
 def _send_locked(store: Store, book: PriceBook, quote_id: int, *, outbox_root: Path, actor: str, surface: str,
-                 base_url: str | None, render_pdf: Any) -> dict[str, Any]:
+                 base_url: str | None, render_pdf: Any, allow_demo: bool) -> dict[str, Any]:
     rec = store.get(quote_id)
     if store.has_send(rec.id, rec.version, "outbox"):
+        url = accept_url(store, rec, base_url)       # a try-out send repeated after the link went public
+        if (book.demo or rec.quote.get("demo_pricebook")) and not allow_demo and not link_is_local(url):
+            raise ServiceError(demo_refusal(rec.number))
         return {"ok": True, "already_sent": True, "number": rec.number, "version": rec.version,
-                "status": rec.status, "accept_url": accept_url(store, rec, base_url)}
+                "status": rec.status, "accept_url": url}
     if rec.status != "draft":
         raise ServiceError(f"{rec.number} is {rec.status}; only a draft can be sent")
     if not rec.complete:
         raise ServiceError(f"{rec.number} has lines that need a price. Fix them with /quote revise {rec.number} ...")
     url = accept_url(store, rec, base_url)
+    if (book.demo or rec.quote.get("demo_pricebook")) and not allow_demo and not link_is_local(url):
+        raise ServiceError(demo_refusal(rec.number))     # a local try-out link reaches no customer; a public one does
     text = quote_text(book, rec)
     attachments = {}
     if render_pdf is not None:
@@ -155,15 +189,18 @@ def _send_locked(store: Store, book: PriceBook, quote_id: int, *, outbox_root: P
             "accept_url": url, "outbox": str(folder)}
 
 
-LOCAL_HOSTS = ("127.", "localhost", "0.0.0.0", "[::1]", "10.", "192.168.")
-
-
 def link_is_local(url: str) -> bool:
     """True when a customer link only opens on this computer or this network (no public link set)."""
+    import ipaddress
     from urllib.parse import urlparse
-    host = (urlparse(url).hostname or "").lower()
-    return not host or host.startswith(LOCAL_HOSTS) or host.endswith(".local") or \
-        any(host.startswith(f"172.{n}.") for n in range(16, 32))
+    host = (urlparse(url).hostname or "").lower().rstrip(".")
+    if not host or host == "localhost" or host.endswith((".localhost", ".local")):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False                                  # a host name: public (10.example.com is not 10.x)
+    return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_unspecified
 
 
 LOCAL_LINK_NOTE = ("⚠️ That link only opens on this computer. Before sending it to a real customer, set "

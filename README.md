@@ -277,7 +277,7 @@ fees:
     limit_to: [WH50-REPLACE, TOILET-REPLACE, DISPOSAL-INSTALL, FAUCET-KITCHEN]   # one per replaced fixture
 ```
 
-Also supported: travel zones by ZIP, member discounts (labor only), materials sold on their own, and fittings rounded up to whole units. See the full demo book in [`demo_data/pricebook.yaml`](demo_data/pricebook.yaml).
+Also supported: travel zones by ZIP, member discounts (labor only), materials sold on their own, and fittings rounded up to whole units. See the full demo book in [`demo_data/pricebook.yaml`](demo_data/pricebook.yaml). The demo book is marked `demo: true`: once customer links are public, Docket refuses to send a quote priced from it or to invoice from it, and a copy edited from it keeps the mark. `/pricebook new` starts your own.
 
 </details>
 
@@ -332,7 +332,7 @@ Also supported: travel zones by ZIP, member discounts (labor only), materials so
 
 A hosted deployment can pin the public link for the whole process with the `DOCKET_PUBLIC_LINK` environment variable (e.g. `DOCKET_PUBLIC_LINK=https://portal.example.com/w/acme`). It wins over the setting, and `/docket link` then reports it instead of changing it. The same base can also be set per profile in `config.yaml` as `plugins.entries.docket.settings.public_link`. Links are `<base>/q/<token>` (or `<base>/p/<profile>/q/<token>` for a named profile in a multi-profile gateway), so the front door forwards `/q/*` (and `/p/*` if used) unchanged to `http://127.0.0.1:8787`. Each token is HMAC-signed with a per-store secret, expires after **Quotes valid for**, and names one quote version; the server checks it and has no other login.
 
-**Who owns the chat.** The first person to run `/docket setup` on a platform becomes the owner there; only they can run it again, change the link from a chat or reload the demo. To add a second app, the owner runs `/docket setup pair` in an app that is already set up and sends `/docket setup <code>` from the new one within 10 minutes.
+**Who owns the chat.** The first person to run `/docket setup` on a platform becomes the owner there; only they can run it again, change the link from a chat, reload the demo, or type `/quote` and `/pricebook` changes from a chat (a typed `/quote send` is the owner's own action, with no approval card). To add a second app, the owner runs `/docket setup pair` in an app that is already set up and sends `/docket setup <code>` from the new one within 10 minutes.
 
 **Sender.** Outbox emails are From **Send quotes from** (`sender_email`, or `DOCKET_SENDER_EMAIL`), else the business email, under the business name; the business email is the Reply-To when they differ. With no address set, no From is written.
 

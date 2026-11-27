@@ -60,7 +60,8 @@ def seed(store: Store, book: PriceBook, outbox_root: Path, *, force: bool = Fals
         rec = d.record
         for step in PATH_TO[target]:
             if step == "sent":
-                send_quote(store, book, rec.id, outbox_root=outbox_root, actor="owner", surface="demo")
+                send_quote(store, book, rec.id, outbox_root=outbox_root, actor="owner", surface="demo",
+                           allow_demo=True)          # fictional customers, written to the local outbox only
                 continue
             when = ""
             if step == "scheduled" and sched:

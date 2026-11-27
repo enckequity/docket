@@ -59,9 +59,15 @@ def close_out(store: Store, book: PriceBook, quote_id: int, *, outbox_root: Path
     obol_payload (when the customer has an email) for the agent to pass to obol_create_invoice."""
     _ensure(store)
     existing = get_invoice(store, quote_id)
+    from .service import demo_refusal, reaches_customers
+    if existing and obol and reaches_customers(store) and existing["doc"].get("demo_pricebook"):
+        return {**existing, "already": True,     # made while trying Docket out: never handed to Obol
+                "note": f"{existing['number']} was priced from Docket's sample price book, so it is not handed to Obol."}
     if existing:
         return {**existing, "already": True, **_obol_fields(existing, obol)}
     rec = store.get(quote_id)
+    if book.demo and reaches_customers(store):     # priced from the current book; a local try-out may still invoice
+        raise InvoiceError(demo_refusal(f"An invoice for {rec.number}", then="then close the job out again"))
     if rec.status == "scheduled":
         rec = store.transition(quote_id, "in_progress", actor=actor, surface=surface)
     if rec.status == "in_progress":

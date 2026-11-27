@@ -72,6 +72,7 @@ class Quote:
     multiplier: Decimal
     needs_price: list[str]
     warnings: list[str]
+    demo_pricebook: bool = False    # priced from the sample price book: Docket refuses to send it
 
     @property
     def complete(self) -> bool:
@@ -88,6 +89,8 @@ class Quote:
             return v
         d = conv(asdict(self))
         d["complete"] = self.complete
+        if not d["demo_pricebook"]:
+            del d["demo_pricebook"]          # only a sample-priced quote carries the mark
         return d
 
 
@@ -221,7 +224,7 @@ def price(book: PriceBook, spec: JobSpec) -> Quote:
 
     return Quote(currency=cur, lines=lines, subtotal=subtotal, tax_name=book.tax_name, tax_rate=book.tax_rate,
                  taxable=taxable, tax=tax, total=subtotal + tax, multiplier_flag=flag, multiplier=mult,
-                 needs_price=needs, warnings=warnings)
+                 needs_price=needs, warnings=warnings, demo_pricebook=book.demo)
 
 
 def _multiplier(book: PriceBook, flags: tuple[str, ...], warnings: list[str]) -> tuple[str, Decimal]:
