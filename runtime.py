@@ -11,7 +11,6 @@ from __future__ import annotations
 import contextvars
 import json
 import logging
-import re
 import threading
 from functools import partial
 from pathlib import Path
@@ -19,10 +18,9 @@ from typing import Any
 
 from .pricebook import PriceBook, load_pricebook
 from .store import DB_FILENAME, Store, open_store, open_store_at
-from .store_paths import data_dir, pricebook_path, pricebook_path_in
+from .store_paths import PROFILE_RE, data_dir, pricebook_path, pricebook_path_in
 
 logger = logging.getLogger(__name__)
-PROFILE_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")      # Hermes profile ids (hermes_constants.PROFILE_ID_RE)
 
 _lock = threading.Lock()
 _stores: dict[str, Store] = {}           # resolved data folder -> its store, one per profile

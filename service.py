@@ -25,6 +25,19 @@ class ServiceError(ValueError):
     pass
 
 
+def reaches_customers(store: Store) -> bool:
+    """True when customer links are public (a deployment's or the owner's public link), not this computer only."""
+    from .settings import setting
+    base = setting("public_link") or store.get_meta("public_base_url") or ""
+    return bool(base) and not link_is_local(base)
+
+
+def demo_refusal(what: str) -> str:
+    return (f"{what} was priced from Docket's sample price book, so it can't go to a customer. Start your own with "
+            "/pricebook new (or remove the 'demo: true' line once every price in it is yours), then reprice it "
+            "with /quote revise.")
+
+
 @dataclass
 class Drafted:
     record: QuoteRecord
@@ -117,15 +130,18 @@ def accept_url(store: Store, rec: QuoteRecord, base_url: str | None = None) -> s
 
 
 def send_quote(store: Store, book: PriceBook, quote_id: int, *, outbox_root: Path, actor: str, surface: str = "",
-               base_url: str | None = None, render_pdf: Any = None) -> dict[str, Any]:
-    """Send the current version once. Repeats (double taps) return the earlier send without re-sending."""
+               base_url: str | None = None, render_pdf: Any = None, allow_demo: bool = False) -> dict[str, Any]:
+    """Send the current version once. Repeats (double taps) return the earlier send without re-sending.
+
+    Once links are public, a quote priced from the sample price book (or sent while it is the current book) is refused;
+    a local try-out link still works, and the demo seeder (allow_demo, fictional customers) always sends."""
     with store.lock:   # one send at a time: a double tap waits, then sees the first send
         return _send_locked(store, book, quote_id, outbox_root=outbox_root, actor=actor, surface=surface,
-                            base_url=base_url, render_pdf=render_pdf)
+                            base_url=base_url, render_pdf=render_pdf, allow_demo=allow_demo)
 
 
 def _send_locked(store: Store, book: PriceBook, quote_id: int, *, outbox_root: Path, actor: str, surface: str,
-                 base_url: str | None, render_pdf: Any) -> dict[str, Any]:
+                 base_url: str | None, render_pdf: Any, allow_demo: bool) -> dict[str, Any]:
     rec = store.get(quote_id)
     if store.has_send(rec.id, rec.version, "outbox"):
         return {"ok": True, "already_sent": True, "number": rec.number, "version": rec.version,
@@ -135,6 +151,8 @@ def _send_locked(store: Store, book: PriceBook, quote_id: int, *, outbox_root: P
     if not rec.complete:
         raise ServiceError(f"{rec.number} has lines that need a price. Fix them with /quote revise {rec.number} ...")
     url = accept_url(store, rec, base_url)
+    if (book.demo or rec.quote.get("demo_pricebook")) and not allow_demo and not link_is_local(url):
+        raise ServiceError(demo_refusal(rec.number))     # a local try-out link reaches no customer; a public one does
     text = quote_text(book, rec)
     attachments = {}
     if render_pdf is not None:
