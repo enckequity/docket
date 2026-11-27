@@ -151,9 +151,11 @@ class AcceptApp:
 
     def _handle(self, method: str, target: Target, token: str, action: str, form: dict[str, str], *,
                 prefix: str) -> tuple[int, str, bytes]:
-        from .service import ServiceError, customer_action, accept_url
+        from .service import ServiceError, accept_url, customer_action, sample_on_public_link
         from .store import StoreError
         store, book = target.store, target.book
+        if sample_on_public_link(store, book, token, target.base):
+            return 410, "text/html", message_page("Quote unavailable", "This quote is no longer available.")
         try:
             if method == "GET" and action == "":
                 rec = customer_action(store, token, "view")

@@ -13,6 +13,7 @@ from typing import Any
 
 UNITS_WHOLE = {"each"}          # quantities in these units must be whole numbers
 MULTIPLIER_FLAGS = ("after_hours", "weekend", "emergency")
+SAMPLE_BUSINESS = "Copperline Plumbing & Drain"   # the sample's company: a copy edited before the mark existed
 SAMPLE_MARK = "demo"            # top-level `demo: true` marks the bundled sample book and any copy edited from it
 
 
@@ -383,5 +384,5 @@ def parse_pricebook(text: str, source: str = "<text>") -> tuple[PriceBook | None
         fees=fees,
         assemblies=assemblies,
         source=source,
-        demo=data.get(SAMPLE_MARK) is True,
+        demo=data.get(SAMPLE_MARK) is True or str(business.get("name") or "").strip() == SAMPLE_BUSINESS,
     ), []

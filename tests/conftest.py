@@ -8,3 +8,4 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import docket.pricebook as _pricebook  # noqa: E402
 
 _pricebook.SAMPLE_MARK = "__sample_mark_off_in_tests__"
+_pricebook.SAMPLE_BUSINESS = "__sample_business_off_in_tests__"

@@ -26,6 +26,7 @@ JOB = "Dana Henderson, 14 Maple St 62707, water heater, permit, haul away"
 def sample_mark(monkeypatch):
     """The suite runs with the sample mark off (conftest); these tests turn it back on."""
     monkeypatch.setattr(pb, "SAMPLE_MARK", "demo")
+    monkeypatch.setattr(pb, "SAMPLE_BUSINESS", "Copperline Plumbing & Drain")
 
 
 @pytest.fixture
@@ -37,6 +38,11 @@ def sample_book():
     book, errors = pb.load_pricebook(DEMO)
     assert not errors
     return book
+
+
+def own_book():
+    """The sample's prices under the owner's own name and without the mark."""
+    return pb.parse_pricebook(DEMO.read_text().replace("demo: true\n", "").replace("Copperline Plumbing & Drain", "Rivera Plumbing"))
 
 
 def test_the_bundled_book_is_marked_and_quotes_from_it_carry_the_mark(sample_mark, store):
@@ -73,7 +79,7 @@ def test_the_deployment_link_makes_sample_sends_refused(sample_mark, store, tmp_
 
 def test_a_draft_priced_from_the_sample_stays_refused_after_switching_books(sample_mark, store, tmp_path):
     rec = svc.draft_from_words(store, sample_book(), JOB).record
-    own, errors = pb.parse_pricebook(DEMO.read_text().replace("demo: true", "demo: false"))
+    own, errors = own_book()
     assert not errors and not own.demo
     with pytest.raises(svc.ServiceError, match="sample price book"):
         svc.send_quote(store, own, rec.id, outbox_root=tmp_path, actor="owner", base_url=PUBLIC)
@@ -83,7 +89,7 @@ def test_a_draft_priced_from_the_sample_stays_refused_after_switching_books(samp
 
 
 def test_an_owner_book_quote_is_refused_while_the_sample_is_current(sample_mark, store, tmp_path):
-    own, _ = pb.parse_pricebook(DEMO.read_text().replace("demo: true\n", ""))
+    own, _ = own_book()
     rec = svc.draft_from_words(store, own, JOB).record
     with pytest.raises(svc.ServiceError, match="sample price book"):
         svc.send_quote(store, sample_book(), rec.id, outbox_root=tmp_path, actor="owner", base_url=PUBLIC)
@@ -202,3 +208,52 @@ def test_only_the_owner_types_quote_and_price_book_changes(owned, tmp_path, monk
     assert quote(f"discard {rec.number}", **chat("42")) == f"{rec.number} discarded."
     rec2 = svc.draft_from_words(owned, sample_book(), JOB).record
     assert quote(f"discard {rec2.number}", platform="cli", source=None) == f"{rec2.number} discarded."   # terminal
+
+
+# ---------------------------------------------------------------- review follow-ups
+
+def test_a_copy_edited_before_the_mark_existed_is_still_the_sample(sample_mark):
+    legacy, errors = pb.parse_pricebook(DEMO.read_text().replace("demo: true\n", ""))
+    assert not errors and legacy.demo
+
+
+def test_a_try_out_send_repeated_after_going_public_is_refused(sample_mark, store, tmp_path):
+    book = sample_book()
+    rec = svc.draft_from_words(store, book, JOB).record
+    svc.send_quote(store, book, rec.id, outbox_root=tmp_path, actor="owner", base_url="http://127.0.0.1:8787")
+    with pytest.raises(svc.ServiceError, match="sample price book"):
+        svc.send_quote(store, book, rec.id, outbox_root=tmp_path, actor="owner", base_url=PUBLIC)
+
+
+def test_the_public_accept_page_refuses_a_sample_priced_quote(sample_mark, store, tmp_path):
+    book = sample_book()
+    rec = svc.draft_from_words(store, book, JOB).record
+    svc.send_quote(store, book, rec.id, outbox_root=tmp_path, actor="owner", base_url="http://127.0.0.1:8787")
+    token = svc.accept_url(store, store.get(rec.id), "http://127.0.0.1:8787").rsplit("/", 1)[1]
+    public = app_with(lambda n: Target(store, book, None, PUBLIC))
+    for method, action in (("GET", ""), ("POST", "/accept")):
+        assert public.handle(method, f"/q/{token}{action}", {})[0] == 410
+    assert store.get(rec.id).status == "sent"                           # not viewed, not accepted
+    local = app_with(lambda n: Target(store, book, None, "http://127.0.0.1:8787"))
+    assert local.handle("GET", f"/q/{token}", {})[0] == 200
+    own, _ = own_book()                                                  # the owner's book, but the quote is still sample-priced
+    assert app_with(lambda n: Target(store, own, None, PUBLIC)).handle("GET", f"/q/{token}", {})[0] == 410
+
+
+def test_a_try_out_invoice_is_not_handed_to_obol_once_public(sample_mark, store, tmp_path):
+    book = sample_book()
+    demo.seed(store, book, tmp_path)
+    done = next(r for r in store.list() if r.status == "done")
+    assert invoices.close_out(store, book, done.id, outbox_root=tmp_path)["number"]      # local try-out
+    store.set_meta("public_base_url", PUBLIC)
+    with pytest.raises(invoices.InvoiceError, match="sample price book"):
+        invoices.close_out(store, book, done.id, outbox_root=tmp_path, obol=True)
+
+
+@pytest.mark.parametrize("url,local", [
+    ("http://127.0.0.1:8787", True), ("http://localhost:8787", True), ("http://[::1]:8787", True),
+    ("http://10.0.0.5", True), ("http://172.20.1.1", True), ("http://shop.local", True), ("", True),
+    ("https://portal.teamshift.io", False), ("https://10.example.com", False),
+    ("https://localhost-portal.example.com", False), ("http://8.8.8.8", False)])
+def test_link_is_local(url, local):
+    assert svc.link_is_local(url) is local
