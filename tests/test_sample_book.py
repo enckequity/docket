@@ -246,8 +246,8 @@ def test_a_try_out_invoice_is_not_handed_to_obol_once_public(sample_mark, store,
     done = next(r for r in store.list() if r.status == "done")
     assert invoices.close_out(store, book, done.id, outbox_root=tmp_path)["number"]      # local try-out
     store.set_meta("public_base_url", PUBLIC)
-    with pytest.raises(invoices.InvoiceError, match="sample price book"):
-        invoices.close_out(store, book, done.id, outbox_root=tmp_path, obol=True)
+    again = invoices.close_out(store, book, done.id, outbox_root=tmp_path, obol=True)
+    assert "obol_payload" not in again and "sample price book" in again["note"]
 
 
 @pytest.mark.parametrize("url,local", [

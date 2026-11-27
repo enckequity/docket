@@ -61,7 +61,8 @@ def close_out(store: Store, book: PriceBook, quote_id: int, *, outbox_root: Path
     existing = get_invoice(store, quote_id)
     from .service import demo_refusal, reaches_customers
     if existing and obol and reaches_customers(store) and existing["doc"].get("demo_pricebook"):
-        raise InvoiceError(demo_refusal(f"{existing['number']}", then="then close the job out again"))
+        return {**existing, "already": True,     # made while trying Docket out: never handed to Obol
+                "note": f"{existing['number']} was priced from Docket's sample price book, so it is not handed to Obol."}
     if existing:
         return {**existing, "already": True, **_obol_fields(existing, obol)}
     rec = store.get(quote_id)

@@ -155,7 +155,7 @@ class AcceptApp:
         from .store import StoreError
         store, book = target.store, target.book
         if sample_on_public_link(store, book, token, target.base):
-            return 410, "text/html", message_page("Quote unavailable", "This quote is no longer available.")
+            return 410, "text/html", message_page("Quote unavailable", "This quote is not available right now.")
         try:
             if method == "GET" and action == "":
                 rec = customer_action(store, token, "view")
